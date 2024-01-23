@@ -1,0 +1,105 @@
+services:
+  ctfd:
+    image: ctfd/ctfd:latest
+    restart: unless-stopped
+    environment:
+      - "DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}"
+      - "REDIS_URL=${REDIS_URL}"
+    env_file:
+      - "./ctfd-app.env"
+    volumes:
+      - "ctfd_logs:/var/log/CTFd"
+      - "ctfd_uploads:/var/uploads"
+    depends_on:
+      - db
+    networks:
+      default:
+      internal:
+
+  nginx:
+    image: nginx:stable
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - "./nginx/http.conf:/etc/nginx/nginx.conf"
+    depends_on:
+      - ctfd
+
+  db:
+    image: mariadb:10.4
+    restart: unless-stopped
+    environment:
+      - "MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}"
+      - "MYSQL_USER=${MYSQL_USER}"
+      - "MYSQL_PASSWORD=${MYSQL_PASSWORD}"
+      - "MYSQL_DATABASE=${MYSQL_DATABASE}"
+    volumes:
+      - "db_storage:/var/lib/mysql"
+    networks:
+        internal:
+    # This command is required to set important mariadb defaults
+    command: [mysqld, --character-set-server=utf8mb4, --collation-server=utf8mb4_unicode_ci, --wait_timeout=28800, --log-warnings=0]
+
+  cache:
+    image: redis:4
+    restart: unless-stopped
+    volumes:
+      - "cache_storage:/data"
+    networks:
+      internal:
+
+  nginx-exporter:
+    image: nginx/nginx-prometheus-exporter:1.1.0
+    restart: unless-stopped
+    ports:
+      - "9113:9113"
+    depends_on:
+      - nginx
+    command:
+      - "--nginx.scrape-uri=http://nginx:8080/stub_status"
+
+  mysqld-exporter:
+    image: prom/mysqld-exporter:latest
+    restart: unless-stopped
+    ports:
+      - "9104:9104"
+    volumes:
+      - "./mysqld-exporter/my.cnf:/.my.cnf"
+    depends_on:
+      - db
+    networks:
+        internal:
+        default:
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    restart: unless-stopped
+    environment:
+      - "REDIS_ADDR=${REDIS_URL}"
+    ports:
+      - "9121:9121"
+    depends_on:
+      - cache
+    networks:
+        internal:
+        default:
+ 
+  ctfd-exporter:
+    image: ghcr.io/eliabir/ctfd-exporter:latest
+    restart: unless-stopped
+    ports:
+      - "2112:2112"
+    env_file:
+      - "./ctfd-exporter.env"
+
+volumes:
+  ctfd_logs: {}
+  ctfd_uploads: {}
+  db_storage: {}
+  cache_storage: {}
+
+networks:
+  default:
+  internal:
+    internal: true
