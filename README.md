@@ -122,6 +122,9 @@ http {
 Create a new nginx site in `/etc/nginx/sites-available/ctfd`.
 
 ```conf
+limit_req_zone  $binary_remote_addr zone=mylimit:10m rate=10r/s;
+limit_conn_zone $binary_remote_addr zone=addr:10m;
+
 upstream app_servers {
     server localhost:8000;
 }
@@ -133,6 +136,10 @@ server {
 
     # Handle Server Sent Events for Notifications
     location /events {
+        limit_req zone=mylimit burst=15;
+        limit_conn addr 10;
+        limit_req_status 429;
+
         proxy_pass http://app_servers;
         proxy_set_header Connection '';
         proxy_http_version 1.1;
@@ -148,6 +155,10 @@ server {
 
     # Proxy connections to the application servers
     location / {
+        limit_req zone=mylimit;
+        limit_conn addr 10;
+        limit_req_status 429;
+
         proxy_pass http://app_servers;
         proxy_redirect off;
         proxy_set_header Host $host;
