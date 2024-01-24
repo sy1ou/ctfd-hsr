@@ -2,6 +2,8 @@ services:
   ctfd:
     image: ctfd/ctfd:latest
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
     environment:
       - "DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}"
       - "REDIS_URL=${REDIS_URL}"
@@ -15,16 +17,6 @@ services:
     networks:
       default:
       internal:
-
-  nginx:
-    image: nginx:stable
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    volumes:
-      - "./nginx/http.conf:/etc/nginx/nginx.conf"
-    depends_on:
-      - ctfd
 
   db:
     image: mariadb:10.4
@@ -49,15 +41,13 @@ services:
     networks:
       internal:
 
-  nginx-exporter:
-    image: nginx/nginx-prometheus-exporter:1.1.0
+  ctfd-exporter:
+    image: ghcr.io/eliabir/ctfd-exporter:latest
     restart: unless-stopped
     ports:
-      - "9113:9113"
-    depends_on:
-      - nginx
-    command:
-      - "--nginx.scrape-uri=http://nginx:8080/stub_status"
+      - "2112:2112"
+    env_file:
+      - "./ctfd-exporter.env"
 
   mysqld-exporter:
     image: prom/mysqld-exporter:latest
@@ -69,8 +59,8 @@ services:
     depends_on:
       - db
     networks:
-        internal:
-        default:
+      internal:
+      default:
 
   redis-exporter:
     image: oliver006/redis_exporter:latest
@@ -82,16 +72,8 @@ services:
     depends_on:
       - cache
     networks:
-        internal:
-        default:
- 
-  ctfd-exporter:
-    image: ghcr.io/eliabir/ctfd-exporter:latest
-    restart: unless-stopped
-    ports:
-      - "2112:2112"
-    env_file:
-      - "./ctfd-exporter.env"
+      internal:
+      default:
 
 volumes:
   ctfd_logs: {}
