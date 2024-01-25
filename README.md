@@ -122,7 +122,7 @@ http {
 Create a new nginx site in `/etc/nginx/sites-available/ctfd`.
 
 ```conf
-limit_req_zone  $binary_remote_addr zone=mylimit:10m rate=10r/s;
+limit_req_zone  $binary_remote_addr zone=public:10m rate=10r/s;
 limit_conn_zone $binary_remote_addr zone=addr:10m;
 
 upstream app_servers {
@@ -136,7 +136,7 @@ server {
 
     # Handle Server Sent Events for Notifications
     location /events {
-        limit_req zone=mylimit burst=15;
+        limit_req zone=public burst=15;
         limit_conn addr 10;
         limit_req_status 429;
 
@@ -155,7 +155,7 @@ server {
 
     # Proxy connections to the application servers
     location / {
-        limit_req zone=mylimit;
+        limit_req zone=public;
         limit_conn addr 10;
         limit_req_status 429;
 
@@ -166,10 +166,14 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Host $server_name;
     }
+}
 
-    location /status {
+server {
+    listen 9113;
+
+    location = /metrics {
         vhost_traffic_status_display;
-        vhost_traffic_status_display_format html;
+        vhost_traffic_status_display_format prometheus;
     }
 }
 ```
@@ -215,3 +219,75 @@ Adapt the [mysqld-exporter/my.cnf](mysqld-exporter/my.cnf) file, replacing the p
 After initializing the CTFd with the web interface, generate an administration API key by [following the instructions here](https://docs.ctfd.io/docs/api/getting-started#generating-an-admin-access-token).
 
 Populate the [ctfd-exporter.env](ctfd-exporter.env) file with the newly generated API key.
+
+## Nftables configuration
+
+Install the nftables package.
+
+```bash
+apt install nftables
+```
+
+Edit the `/etc/nftables.conf` configuration file.
+
+```conf
+#!/usr/sbin/nft -f
+
+# Disabled as it may conflict with docker rules
+#flush ruleset
+
+define net_ipv4_admin = 10.22.9.0/24
+
+table inet firewall {
+
+    chain inbound_ipv4 {
+        # Accepting ping (icmp-echo-request) for diagnostic purposes.
+        icmp type echo-request limit rate 5/second accept
+    }
+
+    chain inbound_ipv6 {
+        # Accepting ping (icmpv6-echo-request) for diagnostic purposes.
+        icmpv6 type echo-request limit rate 5/second accept
+    }
+
+    chain inbound {
+        # By default, drop all traffic unless it meets a filter
+        # criteria specified by the rules that follow below.
+        type filter hook input priority filter; policy drop;
+
+        # Allow traffic from established and related packets, drop invalid
+        ct state vmap { established : accept, related : accept, invalid : drop }
+
+        # Allow loopback traffic.
+        iifname lo accept
+
+        # Jump to chain according to layer 3 protocol using a verdict map
+        meta protocol vmap { ip : jump inbound_ipv4, ip6 : jump inbound_ipv6 }
+
+        # Allow HTTP(S) TCP/80 and TCP/443 for IPv4 and IPv6.
+        tcp dport { http, https } accept
+
+        # Allow SSH on port TCP/22 and allow metrics collection TCP/9104 TCP/9113 and TCP/9121
+        # for IPv4 admin network.
+        ip saddr $net_ipv4_admin tcp dport { ssh, 9104, 9113, 9121 } accept
+
+        # Uncomment to enable logging of denied inbound traffic
+        # log prefix "[nftables] Inbound Denied: " counter drop
+    }
+
+    chain forward {
+        # Drop everything (assumes this device is not a router)
+        type filter hook forward priority filter; policy drop;
+    }
+
+    # no need to define output chain, default policy is accept if undefined.
+}
+```
+
+Start the nftables service to apply the new rules.
+Check that nothing is broken, then enable the service.
+
+```bash
+systemctl start nftables.service
+systemctl enable nftables.service
+```
