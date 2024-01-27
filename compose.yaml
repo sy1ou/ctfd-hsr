@@ -3,15 +3,15 @@ services:
     image: ctfd/ctfd:latest
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8000:8000"
+      - '127.0.0.1:8000:8000'
     environment:
-      - "DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}"
-      - "REDIS_URL=${REDIS_URL}"
+      - 'DATABASE_URL=mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db/${MYSQL_DATABASE}'
+      - 'REDIS_URL=${REDIS_URL}'
     env_file:
-      - "./ctfd-app.env"
+      - './ctfd-app.env'
     volumes:
-      - "ctfd_logs:/var/log/CTFd"
-      - "ctfd_uploads:/var/uploads"
+      - 'ctfd_logs:/var/log/CTFd'
+      - 'ctfd_uploads:/var/uploads'
     depends_on:
       - db
     networks:
@@ -22,12 +22,12 @@ services:
     image: mariadb:10.4
     restart: unless-stopped
     environment:
-      - "MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}"
-      - "MYSQL_USER=${MYSQL_USER}"
-      - "MYSQL_PASSWORD=${MYSQL_PASSWORD}"
-      - "MYSQL_DATABASE=${MYSQL_DATABASE}"
+      - 'MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}'
+      - 'MYSQL_USER=${MYSQL_USER}'
+      - 'MYSQL_PASSWORD=${MYSQL_PASSWORD}'
+      - 'MYSQL_DATABASE=${MYSQL_DATABASE}'
     volumes:
-      - "db_storage:/var/lib/mysql"
+      - 'db_storage:/var/lib/mysql'
     networks:
         internal:
     # This command is required to set important mariadb defaults
@@ -37,43 +37,53 @@ services:
     image: redis:4
     restart: unless-stopped
     volumes:
-      - "cache_storage:/data"
+      - 'cache_storage:/data'
     networks:
       internal:
 
-  ctfd-exporter:
-    image: ghcr.io/eliabir/ctfd-exporter:latest
+  mysqld_exporter:
+    image: quay.io/prometheus/mysqld-exporter:latest
     restart: unless-stopped
     ports:
-      - "2112:2112"
-    env_file:
-      - "./ctfd-exporter.env"
-
-  mysqld-exporter:
-    image: prom/mysqld-exporter:latest
-    restart: unless-stopped
-    ports:
-      - "9104:9104"
+      - '9104:9104'
     volumes:
-      - "./mysqld-exporter/my.cnf:/.my.cnf"
+      - './mysqld-exporter/my.cnf:/.my.cnf'
     depends_on:
       - db
     networks:
       internal:
       default:
 
-  redis-exporter:
+  redis_exporter:
     image: oliver006/redis_exporter:latest
     restart: unless-stopped
     environment:
-      - "REDIS_ADDR=${REDIS_URL}"
+      - 'REDIS_ADDR=${REDIS_URL}'
     ports:
-      - "9121:9121"
+      - '9121:9121'
     depends_on:
       - cache
     networks:
       internal:
       default:
+
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    command:
+      - '--path.rootfs=/host'
+    network_mode: host
+    pid: host
+    restart: unless-stopped
+    volumes:
+      - '/:/host:ro,rslave'
+
+  ctfd_exporter:
+    image: ghcr.io/eliabir/ctfd-exporter:latest
+    restart: unless-stopped
+    ports:
+      - '2112:2112'
+    env_file:
+      - './ctfd-exporter.env'
 
 volumes:
   ctfd_logs: {}

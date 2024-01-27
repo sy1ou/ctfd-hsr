@@ -109,8 +109,19 @@ Add the `vhost_traffic_status_zone` directive in the `/etc/nginx/nginx.conf` fil
 http {
     #...
 
+    ##                                                                                                            
+    # Basic Settings                                                                                              
+    ##                                                                                                            
+                                                                                                                      
+    sendfile on;                                                                                                  
+    tcp_nopush on;                                                                                                
+    types_hash_max_size 2048;                                                                                     
+    server_tokens off;
+
+    #...
+
     ##
-    # VTS settings
+    # VTS Settings
     ##
 
     vhost_traffic_status_zone;
@@ -122,25 +133,21 @@ http {
 Create a new nginx site in `/etc/nginx/sites-available/ctfd`.
 
 ```conf
-limit_req_zone  $binary_remote_addr zone=public:10m rate=10r/s;
+# Define connections limit zone
 limit_conn_zone $binary_remote_addr zone=addr:10m;
 
-upstream app_servers {
+upstream backend {
     server localhost:8000;
 }
 
 server {
     listen 80;
-    gzip on;
+    limit_conn addr 10;
     client_max_body_size 4G;
 
     # Handle Server Sent Events for Notifications
     location /events {
-        limit_req zone=public burst=15;
-        limit_conn addr 10;
-        limit_req_status 429;
-
-        proxy_pass http://app_servers;
+        proxy_pass http://backend;
         proxy_set_header Connection '';
         proxy_http_version 1.1;
         chunked_transfer_encoding off;
@@ -155,11 +162,7 @@ server {
 
     # Proxy connections to the application servers
     location / {
-        limit_req zone=public;
-        limit_conn addr 10;
-        limit_req_status 429;
-
-        proxy_pass http://app_servers;
+        proxy_pass http://backend;
         proxy_redirect off;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -176,6 +179,12 @@ server {
         vhost_traffic_status_display_format prometheus;
     }
 }
+```
+
+```bash
+sudo mkdir -p /var/cache/nginx
+sudo chown www-data /var/cache/nginx
+sudo chmod 700 /var/cache/nginx
 ```
 
 Activates the newly created site and deactivates the `default` site.
