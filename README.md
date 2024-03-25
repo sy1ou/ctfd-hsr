@@ -245,7 +245,7 @@ Edit the `/etc/nftables.conf` configuration file.
 # Disabled as it may conflict with docker rules
 #flush ruleset
 
-define net_ipv4_admin = 10.22.9.0/24
+define net_ipv4_admin = 10.22.149.0/24
 
 table inet firewall {
 
@@ -281,15 +281,8 @@ table inet firewall {
         ip saddr $net_ipv4_admin tcp dport { ssh, 9104, 9113, 9121 } accept
 
         # Uncomment to enable logging of denied inbound traffic
-        # log prefix "[nftables] Inbound Denied: " counter drop
+        log prefix "[nftables] Inbound Denied: " counter drop
     }
-
-    chain forward {
-        # Drop everything (assumes this device is not a router)
-        type filter hook forward priority filter; policy drop;
-    }
-
-    # no need to define output chain, default policy is accept if undefined.
 }
 ```
 
