@@ -141,9 +141,38 @@ upstream backend {
 }
 
 server {
-    listen 80;
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    server_name _;
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+
+    server_name ctf.hacksecureims.eu;
+
+    # Restriction
     limit_conn addr 10;
     client_max_body_size 4G;
+
+    ssl_certificate /etc/ssl/certs/fullchain.pem;
+    ssl_certificate_key /etc/ssl/private/privkey.pem;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:MozSSL:10m;  # about 40000 sessions
+    ssl_session_tickets off;
+
+    # modern configuration
+    ssl_protocols TLSv1.3;
+    ssl_prefer_server_ciphers off;
+
+    # HSTS (ngx_http_headers_module is required) (63072000 seconds)
+    add_header Strict-Transport-Security "max-age=63072000" always;
 
     # Handle Server Sent Events for Notifications
     location /events {
